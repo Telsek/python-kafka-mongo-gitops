@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: api
 spec:
-  replicas: {{ .Values.replicas.api }}
+  # replicas: {{ .Values.replicas.api }} # KEDA sets this now
   selector:
     matchLabels:
       app: api

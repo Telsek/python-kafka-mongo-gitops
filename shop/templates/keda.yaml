@@ -1,0 +1,17 @@
+# KEDA watches the Kafka backlog and adds api pods (2 min, 6 max = 6 partitions)
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: api
+spec:
+  scaleTargetRef:
+    name: api
+  minReplicaCount: 2
+  maxReplicaCount: 6
+  triggers:
+    - type: kafka
+      metadata:
+        bootstrapServers: {{ .Values.kafka }}
+        consumerGroup: api-server
+        topic: purchases
+        lagThreshold: "10" # 1 extra pod per 10 unsaved purchases
