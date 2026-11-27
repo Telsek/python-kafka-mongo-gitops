@@ -1,0 +1,46 @@
+# 3 Mongo pods (1 primary + 2 copies), one per AZ - password comes from Vault via VSO
+apiVersion: mongodbcommunity.mongodb.com/v1
+kind: MongoDBCommunity
+metadata:
+  name: shop-mongo
+  namespace: mongodb
+spec:
+  members: 3
+  type: ReplicaSet
+  version: "8.0.38"
+  security:
+    authentication:
+      modes: ["SCRAM"]
+  users:
+    # the api's user - can only read/write the shop database
+    - name: shop
+      db: admin
+      passwordSecretRef:
+        name: mongo-password
+      roles:
+        - name: readWrite
+          db: shop
+      scramCredentialsSecretName: shop
+  statefulSet:
+    spec:
+      # deleting Mongo also deletes its disks
+      persistentVolumeClaimRetentionPolicy:
+        whenDeleted: Delete
+        whenScaled: Retain
+      template:
+        spec:
+          containers:
+            - name: mongod
+              resources:
+                requests:
+                  cpu: 250m
+                  memory: 1Gi
+                limits:
+                  memory: 1Gi
+          topologySpreadConstraints:
+            - maxSkew: 1
+              topologyKey: topology.kubernetes.io/zone
+              whenUnsatisfiable: DoNotSchedule
+              labelSelector:
+                matchLabels:
+                  app: shop-mongo-svc
