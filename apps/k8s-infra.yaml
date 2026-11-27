@@ -1,0 +1,30 @@
+# OpenTelemetry Collectors - one per node (pod/node metrics + all pod logs) + one for cluster events
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: k8s-infra
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://charts.signoz.io
+    chart: k8s-infra
+    targetRevision: 0.17.1
+    helm:
+      valuesObject:
+        global:
+          clusterName: leaky-pipeline
+        # SigNoz's own collector - OTLP over HTTP (default since chart 0.16)
+        otelCollectorEndpoint: signoz-otel-collector.signoz.svc.cluster.local:4318
+        otelInsecure: true # plain HTTP inside the cluster
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: signoz
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
