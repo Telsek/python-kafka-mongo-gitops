@@ -1,0 +1,30 @@
+# Chaos Mesh - breaks things on purpose (kill a Kafka broker) to prove the shop survives
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: chaos-mesh
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://charts.chaos-mesh.org
+    chart: chaos-mesh
+    targetRevision: 2.8.4
+    helm:
+      valuesObject:
+        chaosDaemon:
+          # EKS nodes run containerd, not Docker
+          runtime: containerd
+          socketPath: /run/containerd/containerd.sock
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: chaos-mesh
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
