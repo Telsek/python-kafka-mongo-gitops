@@ -17,7 +17,9 @@ spec:
         global:
           clusterName: leaky-pipeline
         # SigNoz's own collector - OTLP over HTTP (default since chart 0.16)
-        otelCollectorEndpoint: signoz-otel-collector.signoz.svc.cluster.local:4318
+        # otelCollectorEndpoint: signoz-otel-collector.signoz.svc.cluster.local:4318
+        # the HTTP exporter needs the scheme in the address
+        otelCollectorEndpoint: http://signoz-otel-collector.signoz.svc.cluster.local:4318
         otelInsecure: true # plain HTTP inside the cluster
   destination:
     server: https://kubernetes.default.svc
