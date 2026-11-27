@@ -69,6 +69,14 @@ data:
       echo "mongo password created"
     fi
 
+    # --- shop (the api reads the same Mongo password, from its own namespace) ---
+    vault write auth/kubernetes/role/shop \
+      bound_service_account_names=vault-reader \
+      bound_service_account_namespaces=shop \
+      audience=vault \
+      token_policies=mongo-read \
+      token_ttl=1h
+
     # --- SigNoz admin ---
     vault policy write signoz-read - <<'EOF'
     path "secret/data/signoz" {
