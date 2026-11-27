@@ -1,0 +1,5 @@
+# image version of the shop - written by the release pipeline, read by the Helm chart (3.3)
+images:
+  api: ghcr.io/telsek/leaky-pipeline-api
+  client: ghcr.io/telsek/leaky-pipeline-client
+tag: "0.0.0" # set by the release pipeline
