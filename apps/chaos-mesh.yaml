@@ -28,3 +28,23 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
+      - RespectIgnoreDifferences=true # don't overwrite the fields below on sync
+  # the chart makes new random certs on every render -> without this ArgoCD resyncs and restarts the controller in a loop
+  ignoreDifferences:
+    - kind: Secret
+      namespace: chaos-mesh
+      jsonPointers:
+        - /data
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+      jqPathExpressions:
+        - .webhooks[]?.clientConfig.caBundle
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      jqPathExpressions:
+        - .webhooks[]?.clientConfig.caBundle
+    - group: apps
+      kind: Deployment
+      namespace: chaos-mesh
+      jsonPointers:
+        - /spec/template/metadata/annotations
