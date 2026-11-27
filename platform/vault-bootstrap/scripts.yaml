@@ -36,7 +36,7 @@ data:
       echo "root token read from SSM"
     fi
 
-  # step 3 (vault image): login for pods + Mongo password
+  # step 3 (vault image): login for pods + Mongo and SigNoz passwords
   configure.sh: |
     #!/bin/sh
     set -eu
@@ -48,6 +48,7 @@ data:
     # pods prove who they are with their Kubernetes service account
     vault write auth/kubernetes/config kubernetes_host="https://kubernetes.default.svc:443"
 
+    # --- Mongo ---
     vault policy write mongo-read - <<'EOF'
     path "secret/data/mongo" {
       capabilities = ["read"]
@@ -66,5 +67,25 @@ data:
     if ! vault kv get secret/mongo >/dev/null 2>&1; then
       vault kv put secret/mongo password="$(vault write -field=random_bytes sys/tools/random/24 format=hex)"
       echo "mongo password created"
+    fi
+
+    # --- SigNoz admin ---
+    vault policy write signoz-read - <<'EOF'
+    path "secret/data/signoz" {
+      capabilities = ["read"]
+    }
+    EOF
+
+    vault write auth/kubernetes/role/signoz \
+      bound_service_account_names=vault-reader \
+      bound_service_account_namespaces=signoz \
+      audience=vault \
+      token_policies=signoz-read \
+      token_ttl=1h
+
+    # "-Aa1" adds the upper case, number and symbol SigNoz's password rules ask for
+    if ! vault kv get secret/signoz >/dev/null 2>&1; then
+      vault kv put secret/signoz password="$(vault write -field=random_bytes sys/tools/random/24 format=hex)-Aa1"
+      echo "signoz password created"
     fi
     echo "done"

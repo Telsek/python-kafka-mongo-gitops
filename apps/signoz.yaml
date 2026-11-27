@@ -19,6 +19,17 @@ spec:
         clickhouse:
           persistence:
             size: 10Gi
+        signoz:
+          env:
+            # create the admin + organization on startup (no UI signup) - collectors need the org
+            signoz_user_root_enabled: true
+            signoz_user_root_email: admin@mansuraforecast.online
+            signoz_user_root_org_name: leaky-pipeline
+            signoz_user_root_password:
+              valueFrom:
+                secretKeyRef:
+                  name: signoz-root # made by VSO from Vault
+                  key: password
   destination:
     server: https://kubernetes.default.svc
     namespace: signoz
