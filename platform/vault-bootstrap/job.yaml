@@ -1,0 +1,63 @@
+# gets its AWS permissions (SSM + KMS) through Pod Identity - set up in Terraform
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vault-bootstrap
+  namespace: vault
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: vault-bootstrap
+  namespace: vault
+  annotations:
+    # a Job can't be edited - replace it if this file changes
+    # argocd.argoproj.io/sync-options: Force=true,Replace=true
+    # run once after each sync (after the ServiceAccount + scripts exist), delete the old run first
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 10
+  activeDeadlineSeconds: 900
+  template:
+    spec:
+      serviceAccountName: vault-bootstrap
+      restartPolicy: OnFailure
+      volumes:
+        - name: shared
+          emptyDir:
+            medium: Memory # root token stays in RAM, never on disk
+        - name: scripts
+          configMap:
+            name: vault-bootstrap
+            defaultMode: 0555
+      initContainers:
+        - name: init
+          image: hashicorp/vault:2.0.4
+          command: ["/scripts/init.sh"]
+          env:
+            - name: VAULT_ADDR
+              value: http://vault-0.vault-internal:8200
+          volumeMounts:
+            - { name: shared, mountPath: /shared }
+            - { name: scripts, mountPath: /scripts }
+        - name: save-token
+          image: amazon/aws-cli:2.34.23
+          command: ["/scripts/save-token.sh"]
+          env:
+            - { name: AWS_REGION, value: us-east-1 }
+            - { name: PARAM_PREFIX, value: /leaky-pipeline/vault }
+            - { name: KMS_KEY, value: alias/leaky-pipeline-vault }
+          volumeMounts:
+            - { name: shared, mountPath: /shared }
+            - { name: scripts, mountPath: /scripts }
+      containers:
+        - name: configure
+          image: hashicorp/vault:2.0.4
+          command: ["/scripts/configure.sh"]
+          env:
+            - name: VAULT_ADDR
+              value: http://vault-0.vault-internal:8200
+          volumeMounts:
+            - { name: shared, mountPath: /shared }
+            - { name: scripts, mountPath: /scripts }

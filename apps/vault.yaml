@@ -1,0 +1,80 @@
+# Vault - 3 pods, one per AZ, unlocks itself with KMS
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: vault
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://helm.releases.hashicorp.com
+    chart: vault
+    targetRevision: 0.34.1
+    helm:
+      valuesObject:
+        injector:
+          enabled: false # VSO hands out secrets instead
+        server:
+          ha:
+            enabled: true
+            replicas: 3
+            raft:
+              enabled: true
+              setNodeId: true
+              config: |
+                ui = true
+                disable_mlock = true
+
+                listener "tcp" {
+                  tls_disable     = 1
+                  address         = "[::]:8200"
+                  cluster_address = "[::]:8201"
+                }
+
+                # Vault's own database, copied to all 3 pods
+                storage "raft" {
+                  path = "/vault/data"
+                  retry_join { leader_api_addr = "http://vault-0.vault-internal:8200" }
+                  retry_join { leader_api_addr = "http://vault-1.vault-internal:8200" }
+                  retry_join { leader_api_addr = "http://vault-2.vault-internal:8200" }
+                }
+
+                # unlock with KMS on every start - key + IAM role come from Terraform
+                seal "awskms" {
+                  region     = "us-east-1"
+                  kms_key_id = "alias/leaky-pipeline-vault"
+                }
+
+                service_registration "kubernetes" {}
+          dataStorage:
+            size: 2Gi
+            storageClass: gp3
+          # deleting Vault also deletes its disks
+          persistentVolumeClaimRetentionPolicy:
+            whenDeleted: Delete
+            whenScaled: Retain
+          resources:
+            requests:
+              memory: 256Mi
+              cpu: 100m
+            limits:
+              memory: 512Mi
+          topologySpreadConstraints:
+            - maxSkew: 1
+              topologyKey: topology.kubernetes.io/zone
+              whenUnsatisfiable: DoNotSchedule
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: vault
+                  component: server
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: vault
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

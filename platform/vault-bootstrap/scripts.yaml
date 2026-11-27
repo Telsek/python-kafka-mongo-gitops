@@ -1,0 +1,70 @@
+# the 3 steps of the bootstrap Job - all safe to run again
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-bootstrap
+  namespace: vault
+data:
+  # step 1 (vault image): wait for vault-0, initialize it on a fresh cluster
+  init.sh: |
+    #!/bin/sh
+    set -eu
+    while :; do
+      rc=0; vault status >/dev/null 2>&1 || rc=$?
+      [ "$rc" -ne 1 ] && break # 0 = unlocked, 2 = locked/new, 1 = not reachable yet
+      echo "waiting for vault-0..."; sleep 5
+    done
+    if vault status -format=json 2>/dev/null | grep -q '"initialized": true'; then
+      echo "already initialized"
+    else
+      vault operator init -recovery-shares=1 -recovery-threshold=1 -format=json > /shared/init.json
+      # root token only, no newline at the end
+      sed -n 's/.*"root_token": *"\([^"]*\)".*/\1/p' /shared/init.json | tr -d '\n' > /shared/token
+      echo "initialized"
+    fi
+
+  # step 2 (aws-cli image): new cluster -> save to SSM, otherwise read the token back
+  save-token.sh: |
+    #!/bin/sh
+    set -eu
+    if [ -f /shared/init.json ]; then
+      aws ssm put-parameter --name "$PARAM_PREFIX/init" --type SecureString --key-id "$KMS_KEY" --value file:///shared/init.json --overwrite >/dev/null
+      aws ssm put-parameter --name "$PARAM_PREFIX/root-token" --type SecureString --key-id "$KMS_KEY" --value file:///shared/token --overwrite >/dev/null
+      echo "saved to SSM"
+    else
+      aws ssm get-parameter --name "$PARAM_PREFIX/root-token" --with-decryption --query Parameter.Value --output text | tr -d '\n' > /shared/token
+      echo "root token read from SSM"
+    fi
+
+  # step 3 (vault image): login for pods + Mongo password
+  configure.sh: |
+    #!/bin/sh
+    set -eu
+    export VAULT_TOKEN="$(cat /shared/token)"
+    until vault status >/dev/null 2>&1; do echo "waiting for unlock..."; sleep 3; done
+
+    vault secrets list | grep -q '^secret/' || vault secrets enable -path=secret kv-v2
+    vault auth list | grep -q '^kubernetes/' || vault auth enable kubernetes
+    # pods prove who they are with their Kubernetes service account
+    vault write auth/kubernetes/config kubernetes_host="https://kubernetes.default.svc:443"
+
+    vault policy write mongo-read - <<'EOF'
+    path "secret/data/mongo" {
+      capabilities = ["read"]
+    }
+    EOF
+
+    # only the vault-reader service account in the mongodb namespace may read it
+    vault write auth/kubernetes/role/mongo \
+      bound_service_account_names=vault-reader \
+      bound_service_account_namespaces=mongodb \
+      audience=vault \
+      token_policies=mongo-read \
+      token_ttl=1h
+
+    # Vault generates the password once - nobody types it, it's never in git
+    if ! vault kv get secret/mongo >/dev/null 2>&1; then
+      vault kv put secret/mongo password="$(vault write -field=random_bytes sys/tools/random/24 format=hex)"
+      echo "mongo password created"
+    fi
+    echo "done"
