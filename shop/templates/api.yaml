@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+spec:
+  replicas: {{ .Values.replicas.api }}
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      # spread over AZs, but still start if one AZ is full
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: api
+      containers:
+        - name: api
+          image: "{{ .Values.images.api }}:{{ .Values.tag }}"
+          ports:
+            - containerPort: 8000
+          env:
+            # password from Vault (via VSO) - never in git
+            - name: MONGO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongo-password
+                  key: password
+            # all 3 Mongo members - the driver finds the primary itself
+            - name: MONGO
+              value: "mongodb://shop:$(MONGO_PASSWORD)@shop-mongo-0.shop-mongo-svc.mongodb.svc.cluster.local:27017,shop-mongo-1.shop-mongo-svc.mongodb.svc.cluster.local:27017,shop-mongo-2.shop-mongo-svc.mongodb.svc.cluster.local:27017/?replicaSet=shop-mongo&authSource=admin"
+            - name: KAFKA
+              value: {{ .Values.kafka }}
+            # tracing on, sent to SigNoz (pod logs are already collected by the OTel agents)
+            - name: OTEL_TRACES_EXPORTER
+              value: otlp
+            - name: OTEL_METRICS_EXPORTER
+              value: otlp
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: http/protobuf
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.otelEndpoint }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+spec:
+  selector:
+    app: api
+  ports:
+    - port: 8000
+      targetPort: 8000

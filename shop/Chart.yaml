@@ -1,0 +1,4 @@
+apiVersion: v2
+name: shop
+description: The Leaky Pipeline shop - client + api
+version: 0.1.0

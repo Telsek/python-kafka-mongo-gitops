@@ -1,0 +1,30 @@
+# the shop itself - Helm chart in shop/, image tag written by the release pipeline
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: shop
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io # deleting the app also deletes the ALB + DNS record
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Telsek/python-kafka-mongo-gitops.git
+    targetRevision: main
+    path: shop
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: shop
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - SkipDryRunOnMissingResource=true
+    retry:
+      limit: 10
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 5m

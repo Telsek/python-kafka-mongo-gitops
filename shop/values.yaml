@@ -1,5 +1,11 @@
-# image version of the shop - written by the release pipeline, read by the Helm chart (3.3)
+# shop settings - the release pipeline only changes the tag line
 images:
   api: ghcr.io/telsek/leaky-pipeline-api
   client: ghcr.io/telsek/leaky-pipeline-client
 tag: "1.0.0" # set by the release pipeline
+host: shop.mansuraforecast.online
+replicas:
+  api: 2 # KEDA takes over in 3.4
+  client: 2
+kafka: shop-kafka-bootstrap.kafka:9092
+otelEndpoint: http://signoz-otel-collector.signoz.svc.cluster.local:4318
