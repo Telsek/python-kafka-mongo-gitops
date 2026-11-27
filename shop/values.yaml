@@ -2,4 +2,4 @@
 images:
   api: ghcr.io/telsek/leaky-pipeline-api
   client: ghcr.io/telsek/leaky-pipeline-client
-tag: "0.0.0" # set by the release pipeline
+tag: "1.0.0" # set by the release pipeline
