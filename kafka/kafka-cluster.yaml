@@ -1,0 +1,67 @@
+# the 3 Kafka nodes - each one is broker + controller (KRaft, no ZooKeeper)
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaNodePool
+metadata:
+  name: dual
+  namespace: kafka
+  labels:
+    strimzi.io/cluster: shop
+spec:
+  replicas: 3
+  roles:
+    - controller
+    - broker
+  storage:
+    type: jbod
+    volumes:
+      - id: 0
+        type: persistent-claim
+        size: 10Gi
+        class: gp3
+        kraftMetadata: shared
+        deleteClaim: true # deleting the cluster also deletes its EBS disks
+  resources:
+    requests:
+      memory: 2Gi
+      cpu: 250m
+    limits:
+      memory: 2Gi
+  jvmOptions:
+    -Xms: 1g
+    -Xmx: 1g
+  template:
+    pod:
+      # one node per AZ - lose an AZ, 2 of 3 still a majority
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              strimzi.io/pool-name: dual
+---
+apiVersion: kafka.strimzi.io/v1
+kind: Kafka
+metadata:
+  name: shop
+  namespace: kafka
+spec:
+  kafka:
+    version: 4.3.2
+    # client + api connect to shop-kafka-bootstrap.kafka:9092
+    listeners:
+      - name: plain
+        port: 9092
+        type: internal
+        tls: false
+    # Kafka knows each node's AZ and puts the 3 copies of a partition in 3 different AZs
+    rack:
+      topologyKey: topology.kubernetes.io/zone
+    config:
+      default.replication.factor: 3
+      min.insync.replicas: 2 # a write counts once 2 brokers have it
+      offsets.topic.replication.factor: 3
+      transaction.state.log.replication.factor: 3
+      transaction.state.log.min.isr: 2
+  entityOperator:
+    topicOperator: {} # turns KafkaTopic objects into real topics

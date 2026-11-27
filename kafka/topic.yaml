@@ -1,0 +1,13 @@
+# 6 partitions = up to 6 api pods reading at once (KEDA max)
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: purchases
+  namespace: kafka
+  labels:
+    strimzi.io/cluster: shop
+spec:
+  partitions: 6
+  replicas: 3
+  config:
+    min.insync.replicas: 2
