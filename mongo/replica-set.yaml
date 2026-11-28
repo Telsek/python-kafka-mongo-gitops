@@ -37,6 +37,14 @@ spec:
                   memory: 1Gi
                 limits:
                   memory: 1Gi
+            # the operator's helper container - its default reserves 500m CPU, so the 3rd member didn't fit on a node
+            - name: mongodb-agent
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 400M
+                limits:
+                  memory: 500M
           topologySpreadConstraints:
             - maxSkew: 1
               topologyKey: topology.kubernetes.io/zone
