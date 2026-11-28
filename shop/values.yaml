@@ -2,7 +2,7 @@
 images:
   api: ghcr.io/telsek/leaky-pipeline-api
   client: ghcr.io/telsek/leaky-pipeline-client
-tag: "1.1.0" # set by the release pipeline
+tag: "1.1.1" # set by the release pipeline
 host: shop.mansuraforecast.online
 replicas:
   api: 2 # KEDA takes over in 3.4
